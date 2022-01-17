@@ -22,6 +22,15 @@ class Policy(nn.Module):
         self.layers.append(nn.Linear(input, hidden))
         self.layers.append(nn.Dropout(p=0.5))
         self.layers.append(nn.ReLU())
+
+        self.layers.append(nn.Linear(hidden, hidden))
+        self.layers.append(nn.Dropout(p=0.5))
+        self.layers.append(nn.ReLU())
+        
+        self.layers.append(nn.Linear(hidden, hidden))
+        self.layers.append(nn.Dropout(p=0.5))
+        self.layers.append(nn.ReLU())
+
         self.layers.append(nn.Linear(hidden, output))
         self.layers.append(nn.Softmax(dim=-1))
 
@@ -30,6 +39,30 @@ class Policy(nn.Module):
         self.reward_history = []
         self.loss_history = []
         self.reset()
+
+    def addNode(self, layer):
+        actualLayer = layer * 3
+
+        old = self.layers[actualLayer]
+        connect = self.layers[actualLayer + 3]
+
+        new = nn.Linear(old.in_features, old.out_features + 1)
+        newOut = nn.Linear(connect.in_features + 1, connect.out_features)
+        
+        with torch.no_grad():
+            for i in range(len(old.weight)):
+                for j in range(len(old.weight[i])):
+                    new.weight[i][j] = old.weight[i][j]
+            for i in range(len(new.weight[-1])):
+                new.weight[-1][i] = 0
+            
+            for i in range(len(connect.weight)):
+                for j in range(len(connect.weight[i])):
+                    newOut.weight[i][j] = connect.weight[i][j]
+                newOut.weight[i][-1] = 0
+        self.layers[actualLayer] = new
+        self.layers[actualLayer + 3] = newOut
+        self.optimizer = optim.Adam(self.parameters(), lr=learning_rate)
     
     def addLayer(self, size):
         new_layer = nn.Linear(size, size)
@@ -112,8 +145,8 @@ def train(episodes):
     scores = []
     currentEnv = 0
     for episode in range(episodes):
-        if episode == 50 or episode == 200:
-          policy.addLayer(hidden_size)
+        if episode % 50 == 0:
+          policy.addNode(random.randint(0,2))
           for layer in policy.layers:
               print(layer)
         
@@ -162,13 +195,12 @@ env = []
 env.append(gym.make('CartPole-v1'))
 #env.append(gym.make('Pendulum-v0')) 
 
-folderName = 'growAt50and20016hiddenOptimizeLast'
+folderName = 'test'
 
 # Hyperparameters
 learning_rate = 0.01
 gamma = 0.99
-hidden_size = 16
-
+hidden_size = 8
 
 num_seeds = 10
 num_episodes = 500
