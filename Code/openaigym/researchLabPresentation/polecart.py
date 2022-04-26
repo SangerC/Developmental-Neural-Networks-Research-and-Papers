@@ -22,6 +22,11 @@ class Policy(nn.Module):
         self.layers.append(nn.Linear(input, hidden))
         self.layers.append(nn.Dropout(p=0.5))
         self.layers.append(nn.ReLU())
+
+        #self.layers.append(nn.Linear(hidden, hidden))
+        #self.layers.append(nn.Dropout(p=0.5))
+        #self.layers.append(nn.ReLU())
+
         self.layers.append(nn.Linear(hidden, output))
         self.layers.append(nn.Softmax(dim=-1))
 
@@ -41,9 +46,6 @@ class Policy(nn.Module):
         self.layers.insert(len(self.layers) - 2, new_layer)
         self.layers.insert(len(self.layers) - 2, nn.Dropout(p=.5))
         self.layers.insert(len(self.layers) - 2, nn.ReLU())
-        for p in self.layers:
-            p.requires_grad = False
-        self.layers[-5].requires_grad = True
         self.optimizer = optim.Adam(self.parameters(), lr=learning_rate)
 
     def reset(self):
@@ -112,14 +114,11 @@ def train(episodes):
     scores = []
     currentEnv = 0
     for episode in range(episodes):
-        #if episode == 50 or episode == 200:
-         # policy.addLayer(hidden_size)
-          #for layer in policy.layers:
-           #   print(layer)
+        if episode == episodes/2:
+          policy.addLayer(hidden_size)
+          for layer in policy.layers:
+              print(layer)
         
-        #if episode == 400:
-         #   for p in policy.layers:
-          #      p.requires_grad = True
 
         state = env[currentEnv].reset()
 
@@ -162,15 +161,15 @@ env = []
 env.append(gym.make('CartPole-v1'))
 #env.append(gym.make('Pendulum-v0')) 
 
-folderName = 'nogrowth512'
+folderName = 'test'
 
 # Hyperparameters
 learning_rate = 0.01
 gamma = 0.99
-hidden_size = 512
+hidden_size = 32
 
 
-num_seeds = 10
+num_seeds = 5
 num_episodes = 500
 
 
@@ -214,7 +213,7 @@ for i in range(num_seeds):
 	ax2.set_ylabel('Episode Length')
 
 	fig.tight_layout(pad=2)
-	plt.savefig(folderName + '/PytorchSeed' + str(pytorchSeed) + 'cartSeed' + str(cartSeed) )
+	#plt.savefig(folderName + '/PytorchSeed' + str(pytorchSeed) + 'cartSeed' + str(cartSeed) )
 	
 
 average_history = []
@@ -249,3 +248,4 @@ ax2.set_ylabel('Episode Length')
 
 fig.tight_layout(pad=2)
 plt.savefig(folderName + '/average')
+#plt.show()

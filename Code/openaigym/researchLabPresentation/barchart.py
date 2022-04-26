@@ -11,10 +11,8 @@ import copy
 from torch.distributions import Categorical
 from torch.nn import parameter
 
-
-
 class Policy(nn.Module):
-    def __init__(self, input, output, hidden):
+    def __init__(self, input, output, hidden, layers=0):
         super(Policy, self).__init__()
 
         self.layers = nn.ModuleList()
@@ -22,6 +20,12 @@ class Policy(nn.Module):
         self.layers.append(nn.Linear(input, hidden))
         self.layers.append(nn.Dropout(p=0.5))
         self.layers.append(nn.ReLU())
+
+        for i in range(layers):
+            self.layers.append(nn.Linear(hidden, hidden))
+            self.layers.append(nn.Dropout(p=0.5))
+            self.layers.append(nn.ReLU())
+
         self.layers.append(nn.Linear(hidden, output))
         self.layers.append(nn.Softmax(dim=-1))
 
@@ -31,27 +35,12 @@ class Policy(nn.Module):
         self.loss_history = []
         self.reset()
     
-    def addLayer(self, size):
-        new_layer = nn.Linear(size, size)
-        torch.nn.init.constant_(new_layer.weight, 0)
-        new_layer.bias.data.fill_(0)
-        with torch.no_grad():
-            for i in range(len(new_layer.weight)):
-                new_layer.weight[i, i] = 1
-        self.layers.insert(len(self.layers) - 2, new_layer)
-        self.layers.insert(len(self.layers) - 2, nn.Dropout(p=.5))
-        self.layers.insert(len(self.layers) - 2, nn.ReLU())
-        for p in self.layers:
-            p.requires_grad = False
-        self.layers[-5].requires_grad = True
-        self.optimizer = optim.Adam(self.parameters(), lr=learning_rate)
-
     def reset(self):
         # Episode policy and reward history
         self.episode_actions = torch.Tensor([])
         self.episode_rewards = []
 
-    def forward(self, x, printThis = False):
+    def forward(self, x):
         for i in range(len(self.layers)):
             x = self.layers[i](x)
         return x
@@ -112,15 +101,6 @@ def train(episodes):
     scores = []
     currentEnv = 0
     for episode in range(episodes):
-        #if episode == 50 or episode == 200:
-         # policy.addLayer(hidden_size)
-          #for layer in policy.layers:
-           #   print(layer)
-        
-        #if episode == 400:
-         #   for p in policy.layers:
-          #      p.requires_grad = True
-
         state = env[currentEnv].reset()
 
         for time in range(1000):
@@ -160,92 +140,49 @@ def train(episodes):
 
 env = []
 env.append(gym.make('CartPole-v1'))
-#env.append(gym.make('Pendulum-v0')) 
-
-folderName = 'nogrowth512'
 
 # Hyperparameters
 learning_rate = 0.01
 gamma = 0.99
 hidden_size = 512
 
-
 num_seeds = 10
 num_episodes = 500
 
-
 input_size = sum(i.observation_space.shape[0] for i in env)
-#output_size = sum(i.action_space.n for i in env)
 output_size = env[0].action_space.n
 
+runs = []
 
-rewards_history_by_run = []
+runs.append([4, 0])
+runs.append([4, 1])
 
-for i in range(num_seeds):
+runresults = []
 
-	policy = Policy(input_size, output_size, hidden_size)
-	pytorchSeed = random.randint(0, 1000)
-	cartSeed = random.randint(0, 1000)
-	for i in env:
-	  i.seed(cartSeed)
-	torch.manual_seed(pytorchSeed)
+for run in runs:
 
-	train(episodes=num_episodes)
+    total = 0
 
-	rewards_history_by_run.append(policy.reward_history)
-
-	# number of episodes for rolling average
-	window = 50
-
-	fig, ((ax1), (ax2)) = plt.subplots(2, 1, sharey=True, figsize=[9, 9])
-	rolling_mean = pd.Series(policy.reward_history).rolling(window).mean()
-	std = pd.Series(policy.reward_history).rolling(window).std()
-	ax1.plot(rolling_mean)
-	ax1.fill_between(range(len(policy.reward_history)), rolling_mean -
-	                 std, rolling_mean+std, color='orange', alpha=0.2)
-	ax1.set_title(
-	    'Episode Length Moving Average ({}-episode window)'.format(window))
-	ax1.set_xlabel('Episode')
-	ax1.set_ylabel('Episode Length')
-
-	ax2.plot(policy.reward_history)
-	ax2.set_title('Episode Length')
-	ax2.set_xlabel('Episode')
-	ax2.set_ylabel('Episode Length')
-
-	fig.tight_layout(pad=2)
-	plt.savefig(folderName + '/PytorchSeed' + str(pytorchSeed) + 'cartSeed' + str(cartSeed) )
+    for i in range(num_seeds):
+    
+        policy = Policy(input_size, output_size, run[0], run[1])
+        print(policy.layers)
+        pytorchSeed = random.randint(0, 1000)
+        cartSeed = random.randint(0, 1000)
+        for i in env:
+            i.seed(cartSeed)
+        torch.manual_seed(pytorchSeed)
+    
+        train(episodes=num_episodes)
+        
+        total += policy.reward_history[-1]
+    runresults.append(total/num_seeds)
 	
-
-average_history = []
+for i in range(len(runs)):
+    print("Run with " + str(runs[i][1]) + " layers of " + str(runs[i][0]) + " size: " + str(runresults[i]))
 
 def get_avg(arr_of_arrs, i):
     total = 0
     for k in range(len(arr_of_arrs)):
         total += arr_of_arrs[k][i]
     return total/len(arr_of_arrs)
-
-for i in range(num_episodes):
-    average_history.append(get_avg(rewards_history_by_run, i))
-
-## number of episodes for rolling average
-window = 50
-
-fig, ((ax1), (ax2)) = plt.subplots(2, 1, sharey=True, figsize=[9, 9])
-rolling_mean = pd.Series(average_history).rolling(window).mean()
-std = pd.Series(average_history).rolling(window).std()
-ax1.plot(rolling_mean)
-ax1.fill_between(range(len(average_history)), rolling_mean -
-                 std, rolling_mean+std, color='orange', alpha=0.2)
-ax1.set_title(
-    'Episode Length Moving Average ({}-episode window)'.format(window))
-ax1.set_xlabel('Episode')
-ax1.set_ylabel('Episode Length')
-
-ax2.plot(average_history)
-ax2.set_title('Episode Length')
-ax2.set_xlabel('Episode')
-ax2.set_ylabel('Episode Length')
-
-fig.tight_layout(pad=2)
-plt.savefig(folderName + '/average')
